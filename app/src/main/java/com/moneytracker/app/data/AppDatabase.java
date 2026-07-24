@@ -1,0 +1,106 @@
+package com.moneytracker.app.data;
+
+import android.content.Context;
+
+import androidx.annotation.NonNull;
+import androidx.room.Database;
+import androidx.room.Room;
+import androidx.room.RoomDatabase;
+import androidx.room.TypeConverters;
+import androidx.sqlite.db.SupportSQLiteDatabase;
+
+import com.moneytracker.app.data.dao.AccountDao;
+import com.moneytracker.app.data.dao.CategoryDao;
+import com.moneytracker.app.data.dao.TransactionDao;
+import com.moneytracker.app.data.entity.Account;
+import com.moneytracker.app.data.entity.Category;
+import com.moneytracker.app.data.entity.Transaction;
+import com.moneytracker.app.util.AppExecutors;
+
+import java.util.Arrays;
+
+@Database(
+        entities = {Account.class, Category.class, Transaction.class},
+        version = 2,
+        exportSchema = false
+)
+@TypeConverters({Converters.class})
+public abstract class AppDatabase extends RoomDatabase {
+
+    private static volatile AppDatabase instance;
+
+    public abstract AccountDao accountDao();
+
+    public abstract CategoryDao categoryDao();
+
+    public abstract TransactionDao transactionDao();
+
+    public static AppDatabase getInstance(@NonNull Context context) {
+        if (instance == null) {
+            synchronized (AppDatabase.class) {
+                if (instance == null) {
+                    instance = Room.databaseBuilder(context.getApplicationContext(),
+                                    AppDatabase.class, "moneytracker.db")
+                            .addCallback(seedCallback)
+                            .fallbackToDestructiveMigration()
+                            .build();
+                }
+            }
+        }
+        return instance;
+    }
+
+    private static final Callback seedCallback = new Callback() {
+        @Override
+        public void onCreate(@NonNull SupportSQLiteDatabase db) {
+            super.onCreate(db);
+            AppExecutors.getInstance().diskIO().execute(() -> {
+                if (instance == null) {
+                    return;
+                }
+                seedCategories(instance.categoryDao());
+                seedDefaultAccount(instance.accountDao());
+            });
+        }
+    };
+
+    private static void seedCategories(CategoryDao dao) {
+        Category food = newCategory("category_food", Category.TYPE_EXPENSE, "ic_cat_food", 0xFFF2994A);
+        Category transport = newCategory("category_transport", Category.TYPE_EXPENSE, "ic_cat_transport", 0xFF2F80ED);
+        Category shopping = newCategory("category_shopping", Category.TYPE_EXPENSE, "ic_cat_shopping", 0xFFBB6BD9);
+        Category bills = newCategory("category_bills", Category.TYPE_EXPENSE, "ic_cat_bills", 0xFFEB5757);
+        Category entertainment = newCategory("category_entertainment", Category.TYPE_EXPENSE, "ic_cat_entertainment", 0xFF9B51E0);
+        Category health = newCategory("category_health", Category.TYPE_EXPENSE, "ic_cat_health", 0xFF27AE60);
+        Category otherExpense = newCategory("category_other_expense", Category.TYPE_EXPENSE, "ic_cat_other", 0xFF828282);
+
+        Category salary = newCategory("category_salary", Category.TYPE_INCOME, "ic_cat_salary", 0xFF219653);
+        Category gift = newCategory("category_gift", Category.TYPE_INCOME, "ic_cat_gift", 0xFFF2C94C);
+        Category otherIncome = newCategory("category_other_income", Category.TYPE_INCOME, "ic_cat_other", 0xFF56CCF2);
+
+        dao.insertAll(Arrays.asList(
+                food, transport, shopping, bills, entertainment, health, otherExpense,
+                salary, gift, otherIncome
+        ));
+    }
+
+    private static void seedDefaultAccount(AccountDao dao) {
+        Account cash = new Account();
+        cash.setName("account_cash");
+        cash.setAccountType(Account.TYPE_CASH);
+        cash.setCurrencyCode("CZK");
+        cash.setInitialBalance(0);
+        cash.setAccountNumber(null);
+        cash.setColor(0xFF1A1A1A);
+        cash.setSortOrder(0);
+        dao.insert(cash);
+    }
+
+    private static Category newCategory(String nameKey, String type, String icon, int color) {
+        Category category = new Category();
+        category.setName(nameKey);
+        category.setType(type);
+        category.setIcon(icon);
+        category.setColor(color);
+        return category;
+    }
+}
